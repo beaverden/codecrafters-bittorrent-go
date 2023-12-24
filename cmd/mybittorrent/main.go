@@ -80,8 +80,12 @@ func decodeBencode(bencodedString string) (vector.Vector, error) {
 			pos += 1
 			continue
 		} else if bencodedString[pos] == 'e' {
-			finishedVector := st.Pop()
-			st.Peek().(*vector.Vector).Push(finishedVector)
+			finishedVector := st.Pop().(*vector.Vector)
+			if len(*finishedVector) == 0 {
+				st.Peek().(*vector.Vector).Push([]int8{})
+			} else {
+				st.Peek().(*vector.Vector).Push(*finishedVector)
+			}
 			pos += 1
 			continue
 		} else {
@@ -97,17 +101,18 @@ func main() {
 	if command == "decode" {
 		bencodedValue := os.Args[2]
 
-		vector, err := decodeBencode(bencodedValue)
+		finalArray, err := decodeBencode(bencodedValue)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		var decoded interface{}
-		if vector.Len() == 1 {
-			decoded = vector[0]
+		if len(finalArray) == 1 {
+			decoded = finalArray[0]
 		} else {
-			decoded = vector
+			decoded = finalArray
 		}
+
 		jsonOutput, _ := json.Marshal(decoded)
 		fmt.Println(string(jsonOutput))
 	} else {
