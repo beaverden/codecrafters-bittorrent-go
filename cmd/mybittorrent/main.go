@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"unicode"
+
+	"github.com/golang-collections/collections/stack"
+	"github.com/niemeyer/golang/src/pkg/container/vector"
 	// bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
-func decodeString(bencodedString string) (string, error) {
+func decodeString(bencodedString string) (string, int, error) {
 	var firstColonIndex int
 
 	for i := 0; i < len(bencodedString); i++ {
@@ -23,24 +27,68 @@ func decodeString(bencodedString string) (string, error) {
 
 	length, err := strconv.Atoi(lengthStr)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-
-	return bencodedString[firstColonIndex+1 : firstColonIndex+1+length], nil
+	resultStr := bencodedString[firstColonIndex+1 : firstColonIndex+1+length]
+	totalLength := len(lengthStr) + len(resultStr) + 1
+	return resultStr, totalLength, nil
 }
 
-func decodeInt(bencodedString string) (int, error) {
-	return strconv.Atoi(bencodedString[1 : len(bencodedString)-1])
+func decodeInt(bencodedString string) (int, int, error) {
+	finalPos := strings.Index(bencodedString, "e")
+	numberAsStr := bencodedString[1:finalPos]
+	resultInt, err := strconv.Atoi(numberAsStr)
+	if err != nil {
+		return 0, 0, fmt.Errorf("Failed to convert integer: %s", numberAsStr, err)
+	}
+
+	return resultInt, finalPos + 1, nil
 }
 
-func decodeBencode(bencodedString string) (interface{}, error) {
-	if unicode.IsDigit(rune(bencodedString[0])) {
-		return decodeString(bencodedString)
-	} else if len(bencodedString) >= 3 && bencodedString[0] == 'i' && bencodedString[len(bencodedString)-1] == 'e' {
-		return decodeInt(bencodedString)
-	} else {
-		return "", fmt.Errorf("Unsupported")
+func decodeList(bencodedString string) ([]interface{}, error) {
+	return nil, nil
+}
+
+func decodeBencode(bencodedString string) (vector.Vector, error) {
+	var originalVector vector.Vector
+	st := stack.New()
+	st.Push(&originalVector)
+	pos := 0
+	for {
+		if pos >= len(bencodedString) {
+			break
+		}
+		if unicode.IsDigit(rune(bencodedString[pos])) {
+			value, skip, err := decodeString(bencodedString[pos:])
+			if err != nil {
+				return nil, fmt.Errorf("Failed to decode string at pos %d (%w)", pos, err)
+			}
+			st.Peek().(*vector.Vector).Push(value)
+			pos += skip
+			continue
+		} else if bencodedString[pos] == 'i' {
+			value, skip, err := decodeInt(bencodedString[pos:])
+			if err != nil {
+				return nil, fmt.Errorf("Failed to decode integer at pos %d (%w)", pos, err)
+			}
+			st.Peek().(*vector.Vector).Push(value)
+			pos += skip
+			continue
+		} else if bencodedString[pos] == 'l' {
+			var newVector vector.Vector
+			st.Push(&newVector)
+			pos += 1
+			continue
+		} else if bencodedString[pos] == 'e' {
+			finishedVector := st.Pop()
+			st.Peek().(*vector.Vector).Push(finishedVector)
+			pos += 1
+			continue
+		} else {
+			return nil, fmt.Errorf("Unsupported")
+		}
 	}
+	return originalVector, nil
 }
 
 func main() {
@@ -49,12 +97,17 @@ func main() {
 	if command == "decode" {
 		bencodedValue := os.Args[2]
 
-		decoded, err := decodeBencode(bencodedValue)
+		vector, err := decodeBencode(bencodedValue)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-
+		var decoded interface{}
+		if vector.Len() == 1 {
+			decoded = vector[0]
+		} else {
+			decoded = vector
+		}
 		jsonOutput, _ := json.Marshal(decoded)
 		fmt.Println(string(jsonOutput))
 	} else {
