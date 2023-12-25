@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -30,7 +31,7 @@ func decodeString(bencodedString string) (string, int, error) {
 
 	length, err := strconv.Atoi(lengthStr)
 	if err != nil {
-		return "", 0, err
+		return "", 0, fmt.Errorf("Failed to convert string length from [%s] (%w)", lengthStr, err)
 	}
 	resultStr := bencodedString[firstColonIndex+1 : firstColonIndex+1+length]
 	totalLength := len(lengthStr) + len(resultStr) + 1
@@ -42,14 +43,10 @@ func decodeInt(bencodedString string) (int, int, error) {
 	numberAsStr := bencodedString[1:finalPos]
 	resultInt, err := strconv.Atoi(numberAsStr)
 	if err != nil {
-		return 0, 0, fmt.Errorf("Failed to convert integer: %s", numberAsStr, err)
+		return 0, 0, fmt.Errorf("Failed to convert integer from [%s] (%w)", numberAsStr, err)
 	}
 
 	return resultInt, finalPos + 1, nil
-}
-
-func decodeList(bencodedString string) ([]interface{}, error) {
-	return nil, nil
 }
 
 func addToStack(st *stack.Stack, value interface{}) {
@@ -66,7 +63,7 @@ func addToStack(st *stack.Stack, value interface{}) {
 	}
 }
 
-func decodeBencode(bencodedString string) (vector.Vector, error) {
+func decodeBencode(bencodedString string) (interface{}, error) {
 	var originalVector vector.Vector
 	st := stack.New()
 	st.Push(&originalVector)
@@ -124,7 +121,11 @@ func decodeBencode(bencodedString string) (vector.Vector, error) {
 			return nil, fmt.Errorf("Unsupported")
 		}
 	}
-	return originalVector, nil
+	if len(originalVector) == 1 {
+		return originalVector[0], nil
+	} else {
+		return originalVector, nil
+	}
 }
 
 func main() {
@@ -133,19 +134,37 @@ func main() {
 	if command == "decode" {
 		bencodedValue := os.Args[2]
 
-		finalArray, err := decodeBencode(bencodedValue)
+		value, err := decodeBencode(bencodedValue)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		var decoded interface{}
-		if len(finalArray) == 1 {
-			decoded = finalArray[0]
-		} else {
-			decoded = finalArray
-		}
-		jsonOutput, _ := json.Marshal(decoded)
+
+		jsonOutput, _ := json.Marshal(value)
 		fmt.Println(string(jsonOutput))
+	} else if command == "info" {
+		filePath := os.Args[2]
+		f, err := os.Open(filePath)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		bencodedValue, err := io.ReadAll(f)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		value, err := decodeBencode(string(bencodedValue))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		asMap := value.(AllMap)
+		fmt.Printf("Tracker URL: %s\n", asMap["announce"])
+		fmt.Printf("Length: %d\n", asMap["info"].(AllMap)["length"])
+
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
