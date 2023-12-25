@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -12,6 +13,8 @@ import (
 	"github.com/niemeyer/golang/src/pkg/container/vector"
 	// bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
+
+type AllMap map[string]interface{}
 
 func decodeString(bencodedString string) (string, int, error) {
 	var firstColonIndex int
@@ -49,10 +52,25 @@ func decodeList(bencodedString string) ([]interface{}, error) {
 	return nil, nil
 }
 
+func addToStack(st *stack.Stack, value interface{}) {
+	top := st.Peek()
+	switch top.(type) {
+	case *vector.Vector:
+		top.(*vector.Vector).Push(value)
+	case AllMap:
+		st.Push(value.(string))
+	case string:
+		key := st.Pop().(string)
+		nextTop := st.Peek().(AllMap)
+		nextTop[key] = value
+	}
+}
+
 func decodeBencode(bencodedString string) (vector.Vector, error) {
 	var originalVector vector.Vector
 	st := stack.New()
 	st.Push(&originalVector)
+
 	pos := 0
 	for {
 		if pos >= len(bencodedString) {
@@ -63,7 +81,7 @@ func decodeBencode(bencodedString string) (vector.Vector, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Failed to decode string at pos %d (%w)", pos, err)
 			}
-			st.Peek().(*vector.Vector).Push(value)
+			addToStack(st, value)
 			pos += skip
 			continue
 		} else if bencodedString[pos] == 'i' {
@@ -71,7 +89,7 @@ func decodeBencode(bencodedString string) (vector.Vector, error) {
 			if err != nil {
 				return nil, fmt.Errorf("Failed to decode integer at pos %d (%w)", pos, err)
 			}
-			st.Peek().(*vector.Vector).Push(value)
+			addToStack(st, value)
 			pos += skip
 			continue
 		} else if bencodedString[pos] == 'l' {
@@ -79,12 +97,30 @@ func decodeBencode(bencodedString string) (vector.Vector, error) {
 			st.Push(&newVector)
 			pos += 1
 			continue
+		} else if bencodedString[pos] == 'd' {
+			newMap := make(AllMap)
+			st.Push(newMap)
+			pos += 1
+			continue
 		} else if bencodedString[pos] == 'e' {
-			finishedVector := st.Pop().(*vector.Vector)
-			if len(*finishedVector) == 0 {
-				st.Peek().(*vector.Vector).Push([]int8{})
-			} else {
-				st.Peek().(*vector.Vector).Push(*finishedVector)
+			finishedObject := st.Pop()
+			switch finishedObject.(type) {
+			case *vector.Vector:
+				finishedVector := *finishedObject.(*vector.Vector)
+				if len(finishedVector) == 0 {
+					addToStack(st, []int8{})
+				} else {
+					addToStack(st, finishedVector)
+				}
+			case AllMap:
+				finishedMap := finishedObject.(AllMap)
+				if len(finishedMap) == 0 {
+					addToStack(st, make(map[int8]int8))
+				} else {
+					addToStack(st, finishedMap)
+				}
+			default:
+				return nil, errors.New(fmt.Sprintf("Unknown type to finish at pos %d", pos))
 			}
 			pos += 1
 			continue
@@ -112,7 +148,6 @@ func main() {
 		} else {
 			decoded = finalArray
 		}
-
 		jsonOutput, _ := json.Marshal(decoded)
 		fmt.Println(string(jsonOutput))
 	} else {
