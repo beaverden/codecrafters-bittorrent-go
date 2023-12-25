@@ -114,11 +114,7 @@ func decodeBencode(bencodedString string) (vector.Vector, error) {
 				}
 			case AllMap:
 				finishedMap := finishedObject.(AllMap)
-				if len(finishedMap) == 0 {
-					addToStack(st, make(map[int8]int8))
-				} else {
-					addToStack(st, finishedMap)
-				}
+				addToStack(st, finishedMap)
 			default:
 				return nil, errors.New(fmt.Sprintf("Unknown type to finish at pos %d", pos))
 			}
