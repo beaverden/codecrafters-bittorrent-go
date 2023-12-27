@@ -32,7 +32,7 @@ func main() {
 		}
 
 		var torrent Torrent
-		err = Unmarshal(f, &torrent)
+		err = ext_bencode.Unmarshal(f, &torrent)
 		if err != nil {
 			fmt.Println(err)
 			return
