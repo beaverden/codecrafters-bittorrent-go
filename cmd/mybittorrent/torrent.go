@@ -2,9 +2,9 @@ package main
 
 type Torrent struct {
 	Announce    string
-	Length      int
+	Length      int64
 	Info        map[string]any
 	InfoHash    string
-	PieceLength int
+	PieceLength int64
 	Pieces      []string
 }
