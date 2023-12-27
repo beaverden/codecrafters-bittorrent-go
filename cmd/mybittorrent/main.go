@@ -1,6 +1,10 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -41,11 +45,15 @@ func main() {
 
 		fmt.Printf("Tracker URL: %s\n", torrent.(map[string]any)["announce"])
 		fmt.Printf("Length: %d\n", infoDict.(map[string]any)["length"])
-		// var encodedDict bytes.Buffer
-		// if err := ext_bencode.Marshal(bufio.NewWriter(&encodedDict), torrent.Info); err != nil {
-		// 	panic(err)
-		// }
-		// fmt.Println(encodedDict)
+
+		var encodedDict bytes.Buffer
+		if err := ext_bencode.Marshal(bufio.NewWriter(&encodedDict), infoDict); err != nil {
+			panic(err)
+		}
+		sha1Builder := sha1.New()
+		sha1Builder.Write(encodedDict.Bytes())
+		hash := hex.EncodeToString(sha1Builder.Sum(nil))
+		fmt.Printf("Info Hash: %s\n", hash)
 
 	} else {
 		fmt.Println("Unknown command: " + command)
