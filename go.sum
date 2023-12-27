@@ -2,5 +2,7 @@ github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 h1:
 github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3/go.mod h1:nPpo7qLxd6XL3hWJG/O60sR8ZKfMCiIoNap5GvD12KU=
 github.com/jackpal/bencode-go v1.0.0 h1:lzbSPPqqSfWQnqVNe/BBY1NXdDpncArxShL10+fmFus=
 github.com/jackpal/bencode-go v1.0.0/go.mod h1:5FSBQ74yhCl5oQ+QxRPYzWMONFnxbL68/23eezsBI5c=
+github.com/jackpal/bencode-go v1.0.2 h1:LcCNfZ344u0LpBPOZNjpCLps/wUOuN4r87Fy9+5yU8g=
+github.com/jackpal/bencode-go v1.0.2/go.mod h1:6jI9mUjO3GQbZti3JizEfxTzRfWOM8oBBcwbwlTfceI=
 github.com/niemeyer/golang v0.0.0-20110826170342-f8c0f811cb19 h1:HDsKR+rtTZD+ey3J3U+UWJLko6XJkNWaRp0+yn1u0FQ=
 github.com/niemeyer/golang v0.0.0-20110826170342-f8c0f811cb19/go.mod h1:vOsSoNMQygvjuK93uIN1lif16OAgfRDlVu7hHS96lPg=

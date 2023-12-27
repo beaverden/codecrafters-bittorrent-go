@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -12,10 +13,6 @@ import (
 	"github.com/golang-collections/collections/stack"
 	"github.com/niemeyer/golang/src/pkg/container/vector"
 )
-
-type BencodeDecoder struct {
-	reader io.Reader
-}
 
 func decodeString(bencodedString string) (string, int, error) {
 	var firstColonIndex int
@@ -49,32 +46,28 @@ func decodeInt(bencodedString string) (int, int, error) {
 	return resultInt, finalPos + 1, nil
 }
 
-func addToStack(st *stack.Stack, value interface{}) {
+func addToStack(st *stack.Stack, value any) {
 	top := st.Peek()
 	switch top.(type) {
 	case *vector.Vector:
 		top.(*vector.Vector).Push(value)
-	case map[string]interface{}:
+	case map[string]any:
 		st.Push(value.(string))
 	case string:
 		key := st.Pop().(string)
-		nextTop := st.Peek().(map[string]interface{})
+		nextTop := st.Peek().(map[string]any)
 		nextTop[key] = value
 	}
 }
 
-func NewDecoder(reader io.Reader) *BencodeDecoder {
-	return &BencodeDecoder{reader: reader}
-}
-
-func (bd *BencodeDecoder) DecodeToStr(v *string) error {
+func Decode(reader io.Reader) (string, error) {
 	var originalVector vector.Vector
 	st := stack.New()
 	st.Push(&originalVector)
 
-	bencodedStringBinary, err := io.ReadAll(bd.reader)
+	bencodedStringBinary, err := io.ReadAll(reader)
 	if err != nil {
-		return fmt.Errorf("Faield to read file (%w)", err)
+		return "", fmt.Errorf("Faield to read file (%w)", err)
 	}
 	bencodedString := string(bencodedStringBinary)
 
@@ -86,7 +79,7 @@ func (bd *BencodeDecoder) DecodeToStr(v *string) error {
 		if unicode.IsDigit(rune(bencodedString[pos])) {
 			value, skip, err := decodeString(bencodedString[pos:])
 			if err != nil {
-				return fmt.Errorf("Failed to decode string at pos %d (%w)", pos, err)
+				return "", fmt.Errorf("Failed to decode string at pos %d (%w)", pos, err)
 			}
 			addToStack(st, value)
 			pos += skip
@@ -94,7 +87,7 @@ func (bd *BencodeDecoder) DecodeToStr(v *string) error {
 		} else if bencodedString[pos] == 'i' {
 			value, skip, err := decodeInt(bencodedString[pos:])
 			if err != nil {
-				return fmt.Errorf("Failed to decode integer at pos %d (%w)", pos, err)
+				return "", fmt.Errorf("Failed to decode integer at pos %d (%w)", pos, err)
 			}
 			addToStack(st, value)
 			pos += skip
@@ -105,7 +98,7 @@ func (bd *BencodeDecoder) DecodeToStr(v *string) error {
 			pos += 1
 			continue
 		} else if bencodedString[pos] == 'd' {
-			newMap := make(map[string]interface{})
+			newMap := make(map[string]any)
 			st.Push(newMap)
 			pos += 1
 			continue
@@ -119,16 +112,16 @@ func (bd *BencodeDecoder) DecodeToStr(v *string) error {
 				} else {
 					addToStack(st, finishedVector)
 				}
-			case map[string]interface{}:
-				finishedMap := finishedObject.(map[string]interface{})
+			case map[string]any:
+				finishedMap := finishedObject.(map[string]any)
 				addToStack(st, finishedMap)
 			default:
-				return errors.New(fmt.Sprintf("Unknown type to finish at pos %d", pos))
+				return "", errors.New(fmt.Sprintf("Unknown type to finish at pos %d", pos))
 			}
 			pos += 1
 			continue
 		} else {
-			return fmt.Errorf("Unsupported")
+			return "", fmt.Errorf("Unsupported")
 		}
 	}
 
@@ -140,18 +133,24 @@ func (bd *BencodeDecoder) DecodeToStr(v *string) error {
 	}
 	decoded, err := json.Marshal(value)
 	if err != nil {
-		return fmt.Errorf("Failed to decode final value (%w)", err)
+		return "", fmt.Errorf("Failed to decode final value (%w)", err)
 	}
-	*v = string(decoded)
-
-	return nil
+	return string(decoded), nil
 }
 
-func (bd *BencodeDecoder) DecodeToStruct(v any) error {
-	var s string
-	err := bd.DecodeToStr(&s)
+func ToSnakeCase(str string) string {
+	var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
+
+	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
+}
+
+func Unmarshal(reader io.Reader, v any) error {
+	data, err := Decode(reader)
 	if err != nil {
 		return fmt.Errorf("Failed to decode to str (%w)", err)
 	}
-	return json.Unmarshal([]byte(s), v);
+	return json.Unmarshal([]byte(data), v)
 }

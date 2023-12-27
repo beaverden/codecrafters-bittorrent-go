@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
-	// bencode "github.com/jackpal/bencode-go" // Available if you need it!
+
+	ext_bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
 func main() {
@@ -12,14 +14,15 @@ func main() {
 
 	if command == "decode" {
 		bencodedValue := os.Args[2]
-
-		var v string
-		err := NewDecoder(strings.NewReader(bencodedValue)).DecodeToStr(&v)
+		data, err := ext_bencode.Decode(strings.NewReader(bencodedValue))
 		if err != nil {
-			fmt.Println(err)
-			return
+			panic(err)
 		}
-		fmt.Println(v)
+		if jdata, err := json.Marshal(&data); err != nil {
+			panic(err)
+		} else {
+			fmt.Println(string(jdata))
+		}
 	} else if command == "info" {
 		filePath := os.Args[2]
 		f, err := os.Open(filePath)
@@ -29,7 +32,7 @@ func main() {
 		}
 
 		var torrent Torrent
-		err = NewDecoder(f).DecodeToStruct(&torrent)
+		err = Unmarshal(f, &torrent)
 		if err != nil {
 			fmt.Println(err)
 			return
