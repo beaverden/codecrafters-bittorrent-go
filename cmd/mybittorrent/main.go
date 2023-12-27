@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 
@@ -15,10 +16,15 @@ import (
 
 type AnyMap map[string]any
 
-func readTorrent(reader io.Reader) (Torrent, error) {
+func readTorrent(filePath string) (Torrent, error) {
 	var torrent Torrent
 
-	torrentDecoded, err := ext_bencode.Decode(reader)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return torrent, fmt.Errorf("Failed to open %s (%w)", filePath, err)
+	}
+
+	torrentDecoded, err := ext_bencode.Decode(f)
 	if err != nil {
 		return torrent, fmt.Errorf("Failed to decode torrent file (%w)", err)
 
@@ -61,11 +67,7 @@ func main() {
 		}
 	} else if command == "info" {
 		filePath := os.Args[2]
-		f, err := os.Open(filePath)
-		if err != nil {
-			panic(err)
-		}
-		torrent, err := readTorrent(f)
+		torrent, err := readTorrent(filePath)
 		if err != nil {
 			panic(err)
 		}
@@ -77,16 +79,33 @@ func main() {
 		for _, piece := range torrent.Pieces {
 			fmt.Println(piece)
 		}
-	} else if command == "peer" {
-		// requestMap := map[string]any{
-		// 	"info_hash":  5,
-		// 	"peer_id":    "11111111111111111111",
-		// 	"port":       "6881",
-		// 	"uploaded":   0,
-		// 	"downloaded": 0,
-		// 	"left":       0,
-		// 	"compact":    1,
-		// }
+	} else if command == "peers" {
+		filePath := os.Args[2]
+		torrent, err := readTorrent(filePath)
+		if err != nil {
+			panic(err)
+		}
+
+		client := http.Client{}
+		req, err := http.NewRequest("GET", "http://api.themoviedb.org/3/tv/popular", nil)
+		if err != nil {
+			panic(err)
+		}
+		q := req.URL.Query()
+		q.Add("info_hash", torrent.InfoHash)
+		q.Add("peer_id", "11111111111111111111")
+		q.Add("port", "6881")
+		q.Add("uploaded", "0")
+		q.Add("downloaded", "0")
+		q.Add("left", string(torrent.Length))
+		q.Add("compact", "1")
+		req.URL.RawQuery = q.Encode()
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		data, _ := io.ReadAll(resp.Body)
+		fmt.Println(data)
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
