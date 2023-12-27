@@ -41,9 +41,6 @@ func main() {
 
 		}
 		infoDict := torrent.(map[string]any)["info"].(map[string]any)
-
-		fmt.Printf("Tracker URL: %s\n", torrent.(map[string]any)["announce"])
-		fmt.Printf("Length: %d\n", infoDict["length"])
 		var encodedDict bytes.Buffer
 		if err := ext_bencode.Marshal(&encodedDict, infoDict); err != nil {
 			panic(err)
@@ -51,7 +48,22 @@ func main() {
 		sha1Builder := sha1.New()
 		sha1Builder.Write(encodedDict.Bytes())
 		hash := hex.EncodeToString(sha1Builder.Sum(nil))
+
+		piecesString := []byte(infoDict["pieces"].(string))
+		fmt.Println(piecesString)
+		piecesHashes := make([]string, 0)
+		for i := 0; i < len(piecesString); i += 20 {
+			piecesHashes = append(piecesHashes, hex.EncodeToString(piecesString[i:i+20]))
+		}
+
+		fmt.Printf("Tracker URL: %s\n", torrent.(map[string]any)["announce"])
+		fmt.Printf("Length: %d\n", infoDict["length"])
 		fmt.Printf("Info Hash: %s\n", hash)
+		fmt.Printf("Piece Length: %d\n", infoDict["piece length"])
+		fmt.Printf("Piece Hashes:\n")
+		for _, piece := range piecesHashes {
+			fmt.Println(piece)
+		}
 
 	} else {
 		fmt.Println("Unknown command: " + command)
