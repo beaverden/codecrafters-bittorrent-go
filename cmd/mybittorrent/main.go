@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
@@ -41,13 +40,12 @@ func main() {
 			panic(err)
 
 		}
-		infoDict := torrent.(map[string]any)["info"]
+		infoDict := torrent.(map[string]any)["info"].(map[string]any)
 
 		fmt.Printf("Tracker URL: %s\n", torrent.(map[string]any)["announce"])
-		fmt.Printf("Length: %d\n", infoDict.(map[string]any)["length"])
-
+		fmt.Printf("Length: %d\n", infoDict["length"])
 		var encodedDict bytes.Buffer
-		if err := ext_bencode.Marshal(bufio.NewWriter(&encodedDict), infoDict); err != nil {
+		if err := ext_bencode.Marshal(&encodedDict, infoDict); err != nil {
 			panic(err)
 		}
 		sha1Builder := sha1.New()
