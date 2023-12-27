@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -92,12 +91,16 @@ func main() {
 			panic(err)
 		}
 		q := req.URL.Query()
-		q.Add("info_hash", torrent.InfoHash)
+		decoded, err := hex.DecodeString("d69f91e6b2ae4c542468d1073a71d4ea13879a7f")
+		if err != nil {
+			panic(err)
+		}
+		q.Add("info_hash", string(decoded))
 		q.Add("peer_id", "11111111111111111111")
 		q.Add("port", "6881")
 		q.Add("uploaded", "0")
 		q.Add("downloaded", "0")
-		q.Add("left", string(torrent.Length))
+		q.Add("left", fmt.Sprintf("%d", torrent.Length))
 		q.Add("compact", "1")
 		req.URL.RawQuery = q.Encode()
 		resp, err := client.Do(req)
@@ -105,15 +108,13 @@ func main() {
 			panic(err)
 		}
 		defer resp.Body.Close()
-		debugData, err := io.ReadAll(resp.Body)
-		fmt.Println(debugData)
 
 		data, err := ext_bencode.Decode(resp.Body)
-		ipsBytes := data.(map[string]any)["peers"].([]byte)
+		ipsBytes := []byte(data.(map[string]any)["peers"].(string))
 		for i := 0; i < len(ipsBytes); i += 6 {
-			port := 16*ipsBytes[4] + ipsBytes[5]
-			humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[0], ipsBytes[1], ipsBytes[2], ipsBytes[3], port)
-			fmt.Println(humanIP)
+			port := int64(256)*int64(ipsBytes[i+4]) + int64(ipsBytes[i+5])
+			humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[i], ipsBytes[i+1], ipsBytes[i+2], ipsBytes[i+3], port)
+			fmt.Println("hey", humanIP)
 		}
 	} else {
 		fmt.Println("Unknown command: " + command)
