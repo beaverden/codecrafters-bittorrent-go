@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -87,7 +86,7 @@ func main() {
 		}
 
 		client := http.Client{}
-		req, err := http.NewRequest("GET", "http://api.themoviedb.org/3/tv/popular", nil)
+		req, err := http.NewRequest("GET", torrent.Announce, nil)
 		if err != nil {
 			panic(err)
 		}
@@ -104,8 +103,15 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		data, _ := io.ReadAll(resp.Body)
-		fmt.Println(data)
+		defer resp.Body.Close()
+
+		data, err := ext_bencode.Decode(resp.Body)
+		ipsBytes := data.(map[string]any)["peers"].([]byte)
+		for i := 0; i < len(ipsBytes); i += 6 {
+			port := 16*ipsBytes[4] + ipsBytes[5]
+			humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[0], ipsBytes[1], ipsBytes[2], ipsBytes[3], port)
+			fmt.Println(humanIP)
+		}
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
