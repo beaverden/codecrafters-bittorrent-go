@@ -9,6 +9,8 @@ import (
 	ext_bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
+type AnyMap map[string]any
+
 func main() {
 	command := os.Args[1]
 
@@ -27,19 +29,23 @@ func main() {
 		filePath := os.Args[2]
 		f, err := os.Open(filePath)
 		if err != nil {
-			fmt.Println(err)
-			return
+			panic(err)
 		}
 
-		var torrent Torrent
-		err = ext_bencode.Unmarshal(f, &torrent)
+		torrent, err := ext_bencode.Decode(f)
 		if err != nil {
-			fmt.Println(err)
-			return
-		}
+			panic(err)
 
-		fmt.Printf("Tracker URL: %s\n", torrent.Announce)
-		fmt.Printf("Length: %d\n", torrent.Info.Length)
+		}
+		infoDict := torrent.(map[string]any)["info"]
+
+		fmt.Printf("Tracker URL: %s\n", torrent.(map[string]any)["announce"])
+		fmt.Printf("Length: %d\n", infoDict.(map[string]any)["length"])
+		// var encodedDict bytes.Buffer
+		// if err := ext_bencode.Marshal(bufio.NewWriter(&encodedDict), torrent.Info); err != nil {
+		// 	panic(err)
+		// }
+		// fmt.Println(encodedDict)
 
 	} else {
 		fmt.Println("Unknown command: " + command)
