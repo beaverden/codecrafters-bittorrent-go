@@ -24,7 +24,6 @@ func readTorrent(reader io.Reader) (Torrent, error) {
 
 	}
 	torrent.Announce = torrentDecoded.(map[string]any)["announce"].(string)
-	torrent.Length = torrentDecoded.(map[string]any)["length"].(int)
 
 	infoDict := torrentDecoded.(map[string]any)["info"].(map[string]any)
 	var encodedDict bytes.Buffer
@@ -35,6 +34,7 @@ func readTorrent(reader io.Reader) (Torrent, error) {
 	sha1Builder.Write(encodedDict.Bytes())
 	torrent.InfoHash = hex.EncodeToString(sha1Builder.Sum(nil))
 
+	torrent.Length = infoDict["length"].(int)
 	torrent.PieceLength = infoDict["piece length"].(int)
 	torrent.Pieces = make([]string, 0)
 
