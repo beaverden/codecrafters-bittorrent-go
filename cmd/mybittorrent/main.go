@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -104,6 +105,8 @@ func main() {
 			panic(err)
 		}
 		defer resp.Body.Close()
+		debugData, err := io.ReadAll(resp.Body)
+		fmt.Println(debugData)
 
 		data, err := ext_bencode.Decode(resp.Body)
 		ipsBytes := data.(map[string]any)["peers"].([]byte)
