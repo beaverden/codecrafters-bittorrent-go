@@ -91,7 +91,7 @@ func main() {
 			panic(err)
 		}
 		q := req.URL.Query()
-		decoded, err := hex.DecodeString("d69f91e6b2ae4c542468d1073a71d4ea13879a7f")
+		decoded, err := hex.DecodeString(torrent.InfoHash)
 		if err != nil {
 			panic(err)
 		}
