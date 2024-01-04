@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"os"
 
 	ext_bencode "github.com/jackpal/bencode-go"
@@ -19,18 +20,19 @@ type Torrent struct {
 	} "info"
 	Pieces   []string
 	InfoHash string
+	Peers    []string
 }
 
-func NewTorrent(filePath string) (Torrent, error) {
+func NewTorrent(filePath string) (*Torrent, error) {
 	var torrent Torrent
 
 	f, err := os.Open(filePath)
 	if err != nil {
-		return torrent, fmt.Errorf("Failed to open %s (%w)", filePath, err)
+		return nil, fmt.Errorf("Failed to open %s (%w)", filePath, err)
 	}
 
 	if err := ext_bencode.Unmarshal(f, &torrent); err != nil {
-		return torrent, fmt.Errorf("Failed to decode torrent file (%w)", err)
+		return nil, fmt.Errorf("Failed to decode torrent file (%w)", err)
 	}
 
 	for i := 0; i < len(torrent.Info.Pieces); i += 20 {
@@ -39,8 +41,43 @@ func NewTorrent(filePath string) (Torrent, error) {
 
 	sha1Builder := sha1.New()
 	if err = ext_bencode.Marshal(sha1Builder, torrent.Info); err != nil {
-		return torrent, fmt.Errorf("Failed to encode info dict")
+		return nil, fmt.Errorf("Failed to encode info dict (%w)", err)
 	}
 	torrent.InfoHash = hex.EncodeToString(sha1Builder.Sum(nil))
-	return torrent, nil
+	return &torrent, nil
+}
+
+func (t *Torrent) GetPeers() error {
+	client := http.Client{}
+	req, err := http.NewRequest("GET", t.Announce, nil)
+	if err != nil {
+		return fmt.Errorf("Can't initiate GET request (%w)", err)
+	}
+	q := req.URL.Query()
+	decoded, err := hex.DecodeString(t.InfoHash)
+	if err != nil {
+		return fmt.Errorf("Can't decode torrent info hash (%w)", err)
+	}
+	q.Add("info_hash", string(decoded))
+	q.Add("peer_id", "11111111111111111111")
+	q.Add("port", "6881")
+	q.Add("uploaded", "0")
+	q.Add("downloaded", "0")
+	q.Add("left", fmt.Sprintf("%d", t.Info.Length))
+	q.Add("compact", "1")
+	req.URL.RawQuery = q.Encode()
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("Can't request peers (%w)", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := ext_bencode.Decode(resp.Body)
+	ipsBytes := []byte(data.(map[string]any)["peers"].(string))
+	for i := 0; i < len(ipsBytes); i += 6 {
+		port := int64(256)*int64(ipsBytes[i+4]) + int64(ipsBytes[i+5])
+		humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[i], ipsBytes[i+1], ipsBytes[i+2], ipsBytes[i+3], port)
+		t.Peers = append(t.Peers, humanIP)
+	}
+	return nil
 }
