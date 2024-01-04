@@ -50,6 +50,20 @@ func main() {
 		for _, peer := range torrent.Peers {
 			fmt.Println(peer)
 		}
+	} else if command == "handshake" {
+		filePath := os.Args[2]
+		// peer := os.Args[3]
+		torrent, err := NewTorrent(filePath)
+		if err != nil {
+			panic(err)
+		}
+		if err := torrent.GetPeers(); err != nil {
+			panic(err)
+		}
+
+		if err := torrent.Handshake(torrent.Peers[0]); err != nil {
+			panic(err)
+		}
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)

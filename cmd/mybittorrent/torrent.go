@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 
@@ -21,6 +24,15 @@ type Torrent struct {
 	Pieces   []string
 	InfoHash string
 	Peers    []string
+	PeerID   string
+}
+
+type HandShake struct {
+	Length   byte
+	Protocol [19]byte
+	Reserved [8]byte
+	Hash     [20]byte
+	PeerID   [20]byte
 }
 
 func NewTorrent(filePath string) (*Torrent, error) {
@@ -44,6 +56,7 @@ func NewTorrent(filePath string) (*Torrent, error) {
 		return nil, fmt.Errorf("Failed to encode info dict (%w)", err)
 	}
 	torrent.InfoHash = hex.EncodeToString(sha1Builder.Sum(nil))
+	torrent.PeerID = "11111111111111111111"
 	return &torrent, nil
 }
 
@@ -59,7 +72,7 @@ func (t *Torrent) GetPeers() error {
 		return fmt.Errorf("Can't decode torrent info hash (%w)", err)
 	}
 	q.Add("info_hash", string(decoded))
-	q.Add("peer_id", "11111111111111111111")
+	q.Add("peer_id", t.PeerID)
 	q.Add("port", "6881")
 	q.Add("uploaded", "0")
 	q.Add("downloaded", "0")
@@ -79,5 +92,52 @@ func (t *Torrent) GetPeers() error {
 		humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[i], ipsBytes[i+1], ipsBytes[i+2], ipsBytes[i+3], port)
 		t.Peers = append(t.Peers, humanIP)
 	}
+	return nil
+}
+
+func (t *Torrent) Handshake(peer string) error {
+
+	hashAsBytes, err := hex.DecodeString(t.InfoHash)
+	if err != nil {
+		return fmt.Errorf("Failed to decode info hash (%w)", err)
+	}
+	var h HandShake
+	h.Length = 19
+	copy(h.Protocol[:], []byte("BitTorrent protocol"))
+	copy(h.Hash[:], hashAsBytes)
+	copy(h.PeerID[:], []byte(t.PeerID))
+
+	var b bytes.Buffer
+	if err := binary.Write(&b, binary.LittleEndian, h); err != nil {
+		return fmt.Errorf("Failed to encode struct (%w)", err)
+	}
+	// fmt.Println(string(b.Bytes()))
+
+	// var b bytes.Buffer
+	// b.WriteByte(19)
+	// b.WriteString("BitTorrent protocol")
+	// reserved := [8]byte{0}
+	// b.Write(reserved[:])
+
+	// b.Write(hashAsBytes)
+	// b.Write([]byte(t.PeerID))
+
+	// fmt.Println(string(b.Bytes()))
+
+	conn, err := net.Dial("tcp", peer)
+	if err != nil {
+		return fmt.Errorf("Failed to establish peer connection (%w)", err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Write(b.Bytes())
+	if err != nil {
+		return fmt.Errorf("Faield to write buffer to peer (%w)", err)
+	}
+
+	var hreply HandShake
+	binary.Read(conn, binary.LittleEndian, &hreply)
+	fmt.Printf("Peer ID: %+v\n", hex.EncodeToString(hreply.PeerID[:]))
+
 	return nil
 }
