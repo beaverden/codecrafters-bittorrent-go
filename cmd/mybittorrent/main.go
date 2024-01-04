@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -10,45 +8,9 @@ import (
 	"os"
 	"strings"
 
-	ext_bencode "github.com/jackpal/bencode-go" // Available if you need it!
+	ext_bencode "github.com/jackpal/bencode-go"
+	// Available if you need it!
 )
-
-type AnyMap map[string]any
-
-func readTorrent(filePath string) (Torrent, error) {
-	var torrent Torrent
-
-	f, err := os.Open(filePath)
-	if err != nil {
-		return torrent, fmt.Errorf("Failed to open %s (%w)", filePath, err)
-	}
-
-	torrentDecoded, err := ext_bencode.Decode(f)
-	if err != nil {
-		return torrent, fmt.Errorf("Failed to decode torrent file (%w)", err)
-
-	}
-	torrent.Announce = torrentDecoded.(map[string]any)["announce"].(string)
-
-	infoDict := torrentDecoded.(map[string]any)["info"].(map[string]any)
-	var encodedDict bytes.Buffer
-	if err := ext_bencode.Marshal(&encodedDict, infoDict); err != nil {
-		panic(err)
-	}
-	sha1Builder := sha1.New()
-	sha1Builder.Write(encodedDict.Bytes())
-	torrent.InfoHash = hex.EncodeToString(sha1Builder.Sum(nil))
-
-	torrent.Length = infoDict["length"].(int64)
-	torrent.PieceLength = infoDict["piece length"].(int64)
-	torrent.Pieces = make([]string, 0)
-
-	piecesString := []byte(infoDict["pieces"].(string))
-	for i := 0; i < len(piecesString); i += 20 {
-		torrent.Pieces = append(torrent.Pieces, hex.EncodeToString(piecesString[i:i+20]))
-	}
-	return torrent, nil
-}
 
 func main() {
 	command := os.Args[1]
@@ -66,21 +28,21 @@ func main() {
 		}
 	} else if command == "info" {
 		filePath := os.Args[2]
-		torrent, err := readTorrent(filePath)
+		torrent, err := NewTorrent(filePath)
 		if err != nil {
 			panic(err)
 		}
 		fmt.Printf("Tracker URL: %s\n", torrent.Announce)
-		fmt.Printf("Length: %d\n", torrent.Length)
+		fmt.Printf("Length: %d\n", torrent.Info.Length)
 		fmt.Printf("Info Hash: %s\n", torrent.InfoHash)
-		fmt.Printf("Piece Length: %d\n", torrent.PieceLength)
+		fmt.Printf("Piece Length: %d\n", torrent.Info.PieceLength)
 		fmt.Printf("Piece Hashes:\n")
 		for _, piece := range torrent.Pieces {
 			fmt.Println(piece)
 		}
 	} else if command == "peers" {
 		filePath := os.Args[2]
-		torrent, err := readTorrent(filePath)
+		torrent, err := NewTorrent(filePath)
 		if err != nil {
 			panic(err)
 		}
@@ -100,7 +62,7 @@ func main() {
 		q.Add("port", "6881")
 		q.Add("uploaded", "0")
 		q.Add("downloaded", "0")
-		q.Add("left", fmt.Sprintf("%d", torrent.Length))
+		q.Add("left", fmt.Sprintf("%d", torrent.Info.Length))
 		q.Add("compact", "1")
 		req.URL.RawQuery = q.Encode()
 		resp, err := client.Do(req)
@@ -114,7 +76,7 @@ func main() {
 		for i := 0; i < len(ipsBytes); i += 6 {
 			port := int64(256)*int64(ipsBytes[i+4]) + int64(ipsBytes[i+5])
 			humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[i], ipsBytes[i+1], ipsBytes[i+2], ipsBytes[i+3], port)
-			fmt.Println("hey", humanIP)
+			fmt.Println(humanIP)
 		}
 	} else {
 		fmt.Println("Unknown command: " + command)
