@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
@@ -101,28 +100,11 @@ func (t *Torrent) Handshake(peer string) error {
 	if err != nil {
 		return fmt.Errorf("Failed to decode info hash (%w)", err)
 	}
-	var h HandShake
-	h.Length = 19
-	copy(h.Protocol[:], []byte("BitTorrent protocol"))
-	copy(h.Hash[:], hashAsBytes)
-	copy(h.PeerID[:], []byte(t.PeerID))
-
-	var b bytes.Buffer
-	if err := binary.Write(&b, binary.LittleEndian, h); err != nil {
-		return fmt.Errorf("Failed to encode struct (%w)", err)
-	}
-	// fmt.Println(string(b.Bytes()))
-
-	// var b bytes.Buffer
-	// b.WriteByte(19)
-	// b.WriteString("BitTorrent protocol")
-	// reserved := [8]byte{0}
-	// b.Write(reserved[:])
-
-	// b.Write(hashAsBytes)
-	// b.Write([]byte(t.PeerID))
-
-	// fmt.Println(string(b.Bytes()))
+	var outgoing HandShake
+	outgoing.Length = 19
+	copy(outgoing.Protocol[:], []byte("BitTorrent protocol"))
+	copy(outgoing.Hash[:], hashAsBytes)
+	copy(outgoing.PeerID[:], []byte(t.PeerID))
 
 	conn, err := net.Dial("tcp", peer)
 	if err != nil {
@@ -130,14 +112,13 @@ func (t *Torrent) Handshake(peer string) error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write(b.Bytes())
-	if err != nil {
-		return fmt.Errorf("Faield to write buffer to peer (%w)", err)
+	if err := binary.Write(conn, binary.LittleEndian, outgoing); err != nil {
+		return fmt.Errorf("Failed to encode struct (%w)", err)
 	}
 
-	var hreply HandShake
-	binary.Read(conn, binary.LittleEndian, &hreply)
-	fmt.Printf("Peer ID: %+v\n", hex.EncodeToString(hreply.PeerID[:]))
+	var incoming HandShake
+	binary.Read(conn, binary.LittleEndian, &incoming)
+	fmt.Printf("Peer ID: %+v\n", hex.EncodeToString(incoming.PeerID[:]))
 
 	return nil
 }
