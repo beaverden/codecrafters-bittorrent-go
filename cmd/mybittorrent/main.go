@@ -47,6 +47,9 @@ func main() {
 		if err := torrent.GetPeers(); err != nil {
 			panic(err)
 		}
+		for _, peer := range torrent.Peers {
+			fmt.Println(peer)
+		}
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
