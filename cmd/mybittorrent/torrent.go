@@ -194,7 +194,7 @@ msgLoop:
 		switch messageType {
 		case MessageTypeBitfield:
 			log.Debug("Found BITFIELD")
-			var payload byte
+			payload := make([]byte, messageLength-1)
 			if err := binary.Read(conn, binary.BigEndian, &payload); err != nil {
 				return fmt.Errorf("Failed to read bitfield (%w)", err)
 			}
