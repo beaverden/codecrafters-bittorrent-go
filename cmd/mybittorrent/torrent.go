@@ -73,6 +73,8 @@ func NewTorrent(filePath string) (*Torrent, error) {
 	if err := torrent.getPeers(); err != nil {
 		return nil, fmt.Errorf("Failed to gather peers during creation")
 	}
+	log.Debugf("Torrent length: %d", torrent.Info.Length)
+	log.Debugf("Torrent piece length: %d", torrent.Info.PieceLength)
 	return &torrent, nil
 }
 
