@@ -217,7 +217,7 @@ msgLoop:
 				if pieceId == len(t.Pieces)-1 && i == nrBlocks-1 {
 					requestLength = t.Info.Length % PieceBlockSize
 				}
-				log.Debugf("Requesting block located at %d (size: %d)", i, requestLength)
+				log.Debugf("Requesting block %d (size: %d)", i, requestLength)
 				if err := binary.Write(conn, binary.BigEndian, uint32(13)); err != nil {
 					return fmt.Errorf("Failed to write msg length (%w)", err)
 				}
