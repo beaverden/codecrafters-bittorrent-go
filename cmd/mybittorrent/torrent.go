@@ -75,6 +75,7 @@ func NewTorrent(filePath string) (*Torrent, error) {
 	}
 	log.Debugf("Torrent length: %d", torrent.Info.Length)
 	log.Debugf("Torrent piece length: %d", torrent.Info.PieceLength)
+	log.Debugf("Torrent nr pieces: %d", len(torrent.Pieces))
 	return &torrent, nil
 }
 
