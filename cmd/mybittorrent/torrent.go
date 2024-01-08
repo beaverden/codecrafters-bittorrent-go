@@ -233,7 +233,7 @@ msgLoop:
 				}
 
 				if err := binary.Write(conn, binary.BigEndian, requestLength); err != nil {
-					return fmt.Errorf("Failed to write piece pos (%w)", err)
+					return fmt.Errorf("Failed to write piece pos  (%w)", err)
 				}
 				requestedBlocks += 1
 			}
