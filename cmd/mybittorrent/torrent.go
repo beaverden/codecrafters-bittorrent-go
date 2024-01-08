@@ -107,7 +107,11 @@ func (t *Torrent) getPeers() error {
 	defer resp.Body.Close()
 
 	data, err := ext_bencode.Decode(resp.Body)
+	if data.(map[string]any)["peers"] == nil {
+		log.Debugf("No peers found")
+	}
 	ipsBytes := []byte(data.(map[string]any)["peers"].(string))
+
 	for i := 0; i < len(ipsBytes); i += 6 {
 		port := int64(256)*int64(ipsBytes[i+4]) + int64(ipsBytes[i+5])
 		humanIP := fmt.Sprintf("%d.%d.%d.%d:%d", ipsBytes[i], ipsBytes[i+1], ipsBytes[i+2], ipsBytes[i+3], port)
