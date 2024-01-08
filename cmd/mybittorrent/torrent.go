@@ -211,9 +211,9 @@ msgLoop:
 			for i = 0; i < t.Info.PieceLength; i += PieceBlockSize {
 				var requestLength = PieceBlockSize
 				if uint32(pieceId)*t.Info.PieceLength+i+PieceBlockSize > t.Info.Length {
-					requestLength = t.Info.Length % requestLength
+					requestLength = t.Info.Length % PieceBlockSize
 				}
-				log.Debugf("Requesting piece located at %d (size: %d)", i, requestLength)
+				log.Debugf("Requesting block located at %d (size: %d)", i, requestLength)
 				if err := binary.Write(conn, binary.BigEndian, uint32(13)); err != nil {
 					return fmt.Errorf("Failed to write msg length (%w)", err)
 				}
