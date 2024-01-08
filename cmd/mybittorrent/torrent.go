@@ -174,13 +174,13 @@ func (t *Torrent) DownloadPiece(pieceId int, outPath string) error {
 		return err
 	}
 
-	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0777)
+	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
 	if err != nil {
 		return fmt.Errorf("Failed to open piece for writing")
 	}
 	defer f.Close()
 
-	requestedPieces := 0
+	requestedBlocks := 0
 msgLoop:
 	for {
 		var messageLength uint32
@@ -210,9 +210,11 @@ msgLoop:
 		case MessageTypeUnchoke:
 			log.Debug("FOUND UNCHOKE")
 			var i uint32
-			for i = 0; i < t.Info.PieceLength; i += PieceBlockSize {
+			nrBlocks := (t.Info.PieceLength + PieceBlockSize - 1) / PieceBlockSize
+			log.Debugf("Dividing piece length %d into %d blocks", t.Info.PieceLength, nrBlocks)
+			for i = 0; i < nrBlocks; i += 1 {
 				var requestLength = PieceBlockSize
-				if uint32(pieceId)*t.Info.PieceLength+i+PieceBlockSize > t.Info.Length {
+				if pieceId == len(t.Pieces)-1 && i == nrBlocks-1 {
 					requestLength = t.Info.Length % PieceBlockSize
 				}
 				log.Debugf("Requesting block located at %d (size: %d)", i, requestLength)
@@ -226,14 +228,14 @@ msgLoop:
 				if err := binary.Write(conn, binary.BigEndian, uint32(pieceId)); err != nil {
 					return fmt.Errorf("Failed to write piece id (%w)", err)
 				}
-				if err := binary.Write(conn, binary.BigEndian, uint32(i)); err != nil {
+				if err := binary.Write(conn, binary.BigEndian, uint32(i*PieceBlockSize)); err != nil {
 					return fmt.Errorf("Failed to write piece pos (%w)", err)
 				}
 
 				if err := binary.Write(conn, binary.BigEndian, requestLength); err != nil {
 					return fmt.Errorf("Failed to write piece pos (%w)", err)
 				}
-				requestedPieces += 1
+				requestedBlocks += 1
 			}
 		case MessageTypePiece:
 			log.Debug("FOUND PIECE")
@@ -253,8 +255,8 @@ msgLoop:
 			if _, err = f.Write(data); err != nil {
 				return fmt.Errorf("Failed to write block to file (%w)", err)
 			}
-			requestedPieces -= 1
-			if requestedPieces == 0 {
+			requestedBlocks -= 1
+			if requestedBlocks == 0 {
 				log.Debug("Downloaded all the pieces")
 				f.Close()
 				break msgLoop
