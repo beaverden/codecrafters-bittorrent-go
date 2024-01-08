@@ -25,6 +25,7 @@ func setupLogging() {
 }
 
 func main() {
+	os.Setenv("LOG_LEVEL", "debug")
 	setupLogging()
 
 	command := os.Args[1]
