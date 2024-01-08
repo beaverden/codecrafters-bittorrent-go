@@ -210,13 +210,18 @@ msgLoop:
 
 		case MessageTypeUnchoke:
 			log.Debug("FOUND UNCHOKE")
-			var i uint32
-			nrBlocks := (t.Info.PieceLength + PieceBlockSize - 1) / PieceBlockSize
+			pieceLength := t.Info.PieceLength
+			if pieceId == len(t.Pieces)-1 {
+				pieceLength = t.Info.Length % t.Info.PieceLength
+			}
+
+			nrBlocks := (pieceLength + PieceBlockSize - 1) / PieceBlockSize
 			log.Debugf("Dividing piece length %d into %d blocks", t.Info.PieceLength, nrBlocks)
-			for i = 0; i < nrBlocks; i += 1 {
+			var i uint32
+			for i = 0; i < pieceLength; i += PieceBlockSize {
 				var requestLength = PieceBlockSize
-				if pieceId == len(t.Pieces)-1 && i == nrBlocks-1 {
-					requestLength = t.Info.Length % PieceBlockSize
+				if i+PieceBlockSize > pieceLength {
+					requestLength = pieceLength % PieceBlockSize
 				}
 				log.Debugf("Requesting block %d (size: %d)", i, requestLength)
 				if err := binary.Write(conn, binary.BigEndian, uint32(13)); err != nil {
@@ -229,7 +234,7 @@ msgLoop:
 				if err := binary.Write(conn, binary.BigEndian, uint32(pieceId)); err != nil {
 					return fmt.Errorf("Failed to write piece id (%w)", err)
 				}
-				if err := binary.Write(conn, binary.BigEndian, uint32(i*PieceBlockSize)); err != nil {
+				if err := binary.Write(conn, binary.BigEndian, uint32(i)); err != nil {
 					return fmt.Errorf("Failed to write piece pos (%w)", err)
 				}
 
