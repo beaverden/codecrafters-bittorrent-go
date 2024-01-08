@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
@@ -173,127 +172,117 @@ func (t *Torrent) DownloadPiece(pieceId int, outPath string) error {
 		return err
 	}
 
-	var b []byte
-	for {
-		b = make([]byte, 1024)
-		n, err := conn.Read(b)
-		if err != nil {
-			return fmt.Errorf("Failed to read buf (%w)", err)
-		}
-		if n == 0 {
-			break
-		}
-		reader := bytes.NewReader(b)
-		var messageLength uint32
-		var messageType byte
-		if err := binary.Read(reader, binary.BigEndian, &messageLength); err != nil {
-			return fmt.Errorf("Failed to read message length (%w)", err)
-		}
-		if err := binary.Read(reader, binary.BigEndian, &messageType); err != nil {
-			return fmt.Errorf("Failed to read message type (%w)", err)
-		}
-		log.Debugf("Message length: %d, Message Type: %d", messageLength, messageType)
-		switch messageType {
-		case MessageTypeBitfield:
-			if err := binary.Write(conn, binary.BigEndian, uint32(1)); err != nil {
-				return fmt.Errorf("Failed to write interested message (%w)", err)
-			}
-			if err := binary.Write(conn, binary.BigEndian, MessageTypeInterested); err != nil {
-				return fmt.Errorf("Failed to write interested message (%w)", err)
-			}
-		case MessageTypeUnchoke:
-			if err := t.requestPiece(conn, pieceId, outPath); err != nil {
-				return fmt.Errorf("Failed to download piece (%w)", err)
-			}
-			return nil
-		}
-	}
-
-	return nil
-}
-
-func (t *Torrent) requestPiece(conn net.Conn, pieceId int, outPath string) error {
 	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		return fmt.Errorf("Failed to open piece for writing")
 	}
 	defer f.Close()
 
-	var outbuf bytes.Buffer
-	var i uint32
-	for i = 0; i < t.Info.PieceLength; i += PieceBlockSize {
-		var requestLength = PieceBlockSize
-		if t.Info.PieceLength-i < requestLength {
-			requestLength = t.Info.PieceLength - i
-		}
-		log.Debugf("Requesting piece located at %d (size: %d)", i, requestLength)
-
-		if err := binary.Write(conn, binary.BigEndian, uint32(13)); err != nil {
-			return fmt.Errorf("Failed to write msg length (%w)", err)
-		}
-		if err := binary.Write(conn, binary.BigEndian, MessageTypeRequest); err != nil {
-			return fmt.Errorf("Failed to write msg id (%w)", err)
-		}
-
-		if err := binary.Write(conn, binary.BigEndian, uint32(0)); err != nil {
-			return fmt.Errorf("Failed to write piece id (%w)", err)
-		}
-		if err := binary.Write(conn, binary.BigEndian, uint32(i)); err != nil {
-			return fmt.Errorf("Failed to write piece pos (%w)", err)
-		}
-
-		if err := binary.Write(conn, binary.BigEndian, requestLength); err != nil {
-			return fmt.Errorf("Failed to write piece pos (%w)", err)
-		}
-
+	requestedPieces := 0
+msgLoop:
+	for {
 		var messageLength uint32
 		var messageType byte
-		var pieceIndex uint32
-		var pieceOffset uint32
 		if err := binary.Read(conn, binary.BigEndian, &messageLength); err != nil {
 			return fmt.Errorf("Failed to read message length (%w)", err)
 		}
 		if err := binary.Read(conn, binary.BigEndian, &messageType); err != nil {
 			return fmt.Errorf("Failed to read message type (%w)", err)
 		}
-		if err := binary.Read(conn, binary.BigEndian, &pieceIndex); err != nil {
-			return fmt.Errorf("Failed to read message type (%w)", err)
-		}
-		if err := binary.Read(conn, binary.BigEndian, &pieceOffset); err != nil {
-			return fmt.Errorf("Failed to read message type (%w)", err)
-		}
-		log.Debugf("Message length: %d, Message Type: %d, Piece index: %d, Piece offset: %d",
-			messageLength,
-			messageType,
-			pieceIndex,
-			pieceOffset)
 
-		readTotal := 0
-		var blockBuffer bytes.Buffer
-		for {
-			b := make([]byte, 20000)
-			n, err := conn.Read(b)
-			if err != nil {
-				return fmt.Errorf("Failed to read buf (%w)", err)
+		log.Debugf("Message length: %d, Message Type: %d", messageLength, messageType)
+		switch messageType {
+		case MessageTypeBitfield:
+			log.Debug("Found BITFIELD")
+			var payload byte
+			if err := binary.Read(conn, binary.BigEndian, &payload); err != nil {
+				return fmt.Errorf("Failed to read bitfield (%w)", err)
 			}
-			readTotal += n
-			io.CopyN(&blockBuffer, bytes.NewReader(b), int64(n))
-			if readTotal == int(requestLength) {
-				break
+			if err := binary.Write(conn, binary.BigEndian, uint32(1)); err != nil {
+				return fmt.Errorf("Failed to write interested message (%w)", err)
 			}
+			if err := binary.Write(conn, binary.BigEndian, MessageTypeInterested); err != nil {
+				return fmt.Errorf("Failed to write interested message (%w)", err)
+			}
+
+		case MessageTypeUnchoke:
+			log.Debug("FOUND UNCHOKE")
+			var i uint32
+			for i = 0; i < t.Info.PieceLength; i += PieceBlockSize {
+				var requestLength = PieceBlockSize
+				if uint32(pieceId)*t.Info.PieceLength+i+PieceBlockSize > t.Info.Length {
+					requestLength = t.Info.Length % requestLength
+				}
+				log.Debugf("Requesting piece located at %d (size: %d)", i, requestLength)
+				if err := binary.Write(conn, binary.BigEndian, uint32(13)); err != nil {
+					return fmt.Errorf("Failed to write msg length (%w)", err)
+				}
+				if err := binary.Write(conn, binary.BigEndian, MessageTypeRequest); err != nil {
+					return fmt.Errorf("Failed to write msg id (%w)", err)
+				}
+
+				if err := binary.Write(conn, binary.BigEndian, uint32(pieceId)); err != nil {
+					return fmt.Errorf("Failed to write piece id (%w)", err)
+				}
+				if err := binary.Write(conn, binary.BigEndian, uint32(i)); err != nil {
+					return fmt.Errorf("Failed to write piece pos (%w)", err)
+				}
+
+				if err := binary.Write(conn, binary.BigEndian, requestLength); err != nil {
+					return fmt.Errorf("Failed to write piece pos (%w)", err)
+				}
+				requestedPieces += 1
+			}
+		case MessageTypePiece:
+			log.Debug("FOUND PIECE")
+			var pieceIndex uint32
+			var pieceOffset uint32
+			if err := binary.Read(conn, binary.BigEndian, &pieceIndex); err != nil {
+				return fmt.Errorf("Failed to read message type (%w)", err)
+			}
+			if err := binary.Read(conn, binary.BigEndian, &pieceOffset); err != nil {
+				return fmt.Errorf("Failed to read message type (%w)", err)
+			}
+			data := make([]byte, messageLength-9)
+			if err := binary.Read(conn, binary.BigEndian, &data); err != nil {
+				return fmt.Errorf("Failed to read block data (%w)", err)
+			}
+			f.Seek(int64(pieceOffset), io.SeekStart)
+			if _, err = f.Write(data); err != nil {
+				return fmt.Errorf("Failed to write block to file (%w)", err)
+			}
+			requestedPieces -= 1
+			if requestedPieces == 0 {
+				log.Debug("Downloaded all the pieces")
+				f.Close()
+				break msgLoop
+			}
+		default:
+			return errors.New(fmt.Sprintf("Unknown message type: %d", messageType))
 		}
-		io.Copy(&outbuf, &blockBuffer)
 	}
 
-	sha1Builder := sha1.New()
-	sha1Builder.Write(outbuf.Bytes())
-	pieceHash := hex.EncodeToString(sha1Builder.Sum(nil))
-	if pieceHash != t.Pieces[pieceId] {
-		return errors.New("Failed to validate checksum")
+	hash, err := fileSHA1(outPath)
+	if err != nil {
+		return fmt.Errorf("Failed to calculate piece hash (%w)", err)
 	}
-
-	if _, err := io.Copy(f, &outbuf); err != nil {
-		return fmt.Errorf("Failed to write piece (%w)", err)
+	if hash != t.Pieces[pieceId] {
+		return errors.New(fmt.Sprintf("Hash invalid [%s] (required: %s)", hash, t.Pieces[pieceId]))
 	}
 	return nil
+}
+
+func fileSHA1(filePath string) (string, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("Failed to open file %s (%w)", filePath, err)
+	}
+	defer f.Close()
+
+	h := sha1.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("Failed to ingest file %s (%w)", filePath, err)
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
