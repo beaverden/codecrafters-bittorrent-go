@@ -4,15 +4,30 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	ext_bencode "github.com/jackpal/bencode-go"
+	"github.com/sirupsen/logrus"
 	// Available if you need it!
 )
 
-func main() {
-	command := os.Args[1]
+func setupLogging() {
+	lvl, ok := os.LookupEnv("LOG_LEVEL")
+	if !ok {
+		lvl = "error"
+	}
+	ll, err := logrus.ParseLevel(lvl)
+	if err != nil {
+		ll = logrus.ErrorLevel
+	}
+	logrus.SetLevel(ll)
+}
 
+func main() {
+	setupLogging()
+
+	command := os.Args[1]
 	if command == "decode" {
 		bencodedValue := os.Args[2]
 		data, err := ext_bencode.Decode(strings.NewReader(bencodedValue))
@@ -44,21 +59,41 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		if err := torrent.GetPeers(); err != nil {
-			panic(err)
-		}
 		for _, peer := range torrent.Peers {
 			fmt.Println(peer)
 		}
 	} else if command == "handshake" {
 		filePath := os.Args[2]
-		peer := os.Args[3]
+
 		torrent, err := NewTorrent(filePath)
 		if err != nil {
 			panic(err)
 		}
-		if err := torrent.Handshake(peer); err != nil {
+
+		peer := os.Args[3]
+		// peer := ""
+		id, err := torrent.GetPeerID(peer)
+		if err != nil {
 			panic(err)
+		}
+		fmt.Printf("Peer ID: %s\n", id)
+	} else if command == "download_piece" {
+		downloadPath := os.Args[3]
+		filePath := os.Args[4]
+		pieceId, err := strconv.Atoi(os.Args[5])
+		if err != nil {
+			panic(err)
+		}
+
+		torrent, err := NewTorrent(filePath)
+		if err != nil {
+			panic(err)
+		}
+
+		if err = torrent.DownloadPiece(pieceId, downloadPath); err != nil {
+			panic(err)
+		} else {
+			fmt.Printf("Piece %d downloaded to %s.", pieceId, downloadPath)
 		}
 	} else {
 		fmt.Println("Unknown command: " + command)
