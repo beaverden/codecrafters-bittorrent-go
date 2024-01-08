@@ -109,7 +109,9 @@ func (t *Torrent) getPeers() error {
 	data, err := ext_bencode.Decode(resp.Body)
 	if data.(map[string]any)["peers"] == nil {
 		log.Debugf("No peers found")
+		return nil
 	}
+
 	ipsBytes := []byte(data.(map[string]any)["peers"].(string))
 
 	for i := 0; i < len(ipsBytes); i += 6 {
