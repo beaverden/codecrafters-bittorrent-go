@@ -96,6 +96,18 @@ func main() {
 		} else {
 			fmt.Printf("Piece %d downloaded to %s.", pieceId, downloadPath)
 		}
+	} else if command == "download" {
+		downloadPath := os.Args[3]
+		filePath := os.Args[4]
+		torrent, err := NewTorrent(filePath)
+		if err != nil {
+			panic(err)
+		}
+		if err = torrent.DownloadFile(downloadPath); err != nil {
+			panic(err)
+		} else {
+			fmt.Printf("Downloaded %s to %s.", filePath, downloadPath)
+		}
 	} else {
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)

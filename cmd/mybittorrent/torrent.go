@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
@@ -168,18 +169,41 @@ func (t *Torrent) GetPeerID(peer string) (string, error) {
 	return id, nil
 }
 
-func (t *Torrent) DownloadPiece(pieceId int, outPath string) error {
-	conn, _, err := t.handshake("")
-	defer conn.Close()
-	if err != nil {
-		return err
-	}
-
+func (t *Torrent) DownloadFile(outPath string) error {
 	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
 	if err != nil {
 		return fmt.Errorf("Failed to open piece for writing")
 	}
 	defer f.Close()
+
+	for pieceId, _ := range t.Pieces {
+		if err := t.downloadPiece(pieceId, f); err != nil {
+			return fmt.Errorf("Failed to download piece %d (%w)", pieceId, err)
+		}
+	}
+	return nil
+}
+
+func (t *Torrent) DownloadPiece(pieceId int, outPath string) error {
+	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0777)
+	if err != nil {
+		return fmt.Errorf("Failed to open piece for writing")
+	}
+	defer f.Close()
+	if err := t.downloadPiece(pieceId, f); err != nil {
+		return fmt.Errorf("Failed to download piece (%w)", err)
+	}
+	f.Close()
+	return nil
+}
+
+func (t *Torrent) downloadPiece(pieceId int, out io.Writer) error {
+	conn, _, err := t.handshake("")
+	defer conn.Close()
+	if err != nil {
+		return err
+	}
+	var pieceBuf bytes.Buffer
 
 	requestedBlocks := 0
 msgLoop:
@@ -257,14 +281,12 @@ msgLoop:
 			if err := binary.Read(conn, binary.BigEndian, &data); err != nil {
 				return fmt.Errorf("Failed to read block data (%w)", err)
 			}
-			f.Seek(int64(pieceOffset), io.SeekStart)
-			if _, err = f.Write(data); err != nil {
+			if _, err = pieceBuf.Write(data); err != nil {
 				return fmt.Errorf("Failed to write block to file (%w)", err)
 			}
 			requestedBlocks -= 1
 			if requestedBlocks == 0 {
 				log.Debug("Downloaded all the pieces")
-				f.Close()
 				break msgLoop
 			}
 		default:
@@ -272,27 +294,15 @@ msgLoop:
 		}
 	}
 
-	hash, err := fileSHA1(outPath)
-	if err != nil {
-		return fmt.Errorf("Failed to calculate piece hash (%w)", err)
+	h := sha1.New()
+	h.Write(pieceBuf.Bytes())
+	pieceHash := hex.EncodeToString(h.Sum(nil))
+	if pieceHash != t.Pieces[pieceId] {
+		return errors.New(fmt.Sprintf("Hash invalid [%s] (required: %s)", pieceHash, t.Pieces[pieceId]))
 	}
-	if hash != t.Pieces[pieceId] {
-		return errors.New(fmt.Sprintf("Hash invalid [%s] (required: %s)", hash, t.Pieces[pieceId]))
+	_, err = io.Copy(out, &pieceBuf)
+	if err != nil {
+		return fmt.Errorf("Failed to copy piece buf to out buf (%w)", err)
 	}
 	return nil
-}
-
-func fileSHA1(filePath string) (string, error) {
-	f, err := os.Open(filePath)
-	if err != nil {
-		return "", fmt.Errorf("Failed to open file %s (%w)", filePath, err)
-	}
-	defer f.Close()
-
-	h := sha1.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", fmt.Errorf("Failed to ingest file %s (%w)", filePath, err)
-	}
-
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
