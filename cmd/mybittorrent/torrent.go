@@ -202,7 +202,7 @@ func (t *Torrent) DownloadPiece(pieceId int, outPath string) error {
 				return fmt.Errorf("Failed to write interested message (%w)", err)
 			}
 		case MessageTypeUnchoke:
-			if err := requestPiece(conn, t.Pieces[0], t.Info.PieceLength); err != nil {
+			if err := t.requestPiece(conn, pieceId, outPath); err != nil {
 				return fmt.Errorf("Failed to download piece (%w)", err)
 			}
 			return nil
@@ -212,8 +212,8 @@ func (t *Torrent) DownloadPiece(pieceId int, outPath string) error {
 	return nil
 }
 
-func requestPiece(conn net.Conn, piece string, pieceLength uint32) error {
-	f, err := os.OpenFile("piece-0.tmp", os.O_CREATE|os.O_WRONLY, 0777)
+func (t *Torrent) requestPiece(conn net.Conn, pieceId int, outPath string) error {
+	f, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0777)
 	if err != nil {
 		return fmt.Errorf("Failed to open piece for writing")
 	}
@@ -221,10 +221,10 @@ func requestPiece(conn net.Conn, piece string, pieceLength uint32) error {
 
 	var outbuf bytes.Buffer
 	var i uint32
-	for i = 0; i < pieceLength; i += PieceBlockSize {
+	for i = 0; i < t.Info.PieceLength; i += PieceBlockSize {
 		var requestLength = PieceBlockSize
-		if pieceLength-i < requestLength {
-			requestLength = pieceLength - i
+		if t.Info.PieceLength-i < requestLength {
+			requestLength = t.Info.PieceLength - i
 		}
 		log.Debugf("Requesting piece located at %d (size: %d)", i, requestLength)
 
@@ -288,7 +288,7 @@ func requestPiece(conn net.Conn, piece string, pieceLength uint32) error {
 	sha1Builder := sha1.New()
 	sha1Builder.Write(outbuf.Bytes())
 	pieceHash := hex.EncodeToString(sha1Builder.Sum(nil))
-	if pieceHash != piece {
+	if pieceHash != t.Pieces[pieceId] {
 		return errors.New("Failed to validate checksum")
 	}
 
