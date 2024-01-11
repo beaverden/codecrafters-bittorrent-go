@@ -9,7 +9,6 @@ import (
 
 	ext_bencode "github.com/jackpal/bencode-go"
 	"github.com/sirupsen/logrus"
-	// Available if you need it!
 )
 
 func setupLogging() {
@@ -25,7 +24,6 @@ func setupLogging() {
 }
 
 func main() {
-	os.Setenv("LOG_LEVEL", "debug")
 	setupLogging()
 
 	command := os.Args[1]

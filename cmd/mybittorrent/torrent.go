@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -131,8 +132,8 @@ func (t *Torrent) handshake(peer string) (net.Conn, string, error) {
 		if err := t.getPeers(); err != nil {
 			return nil, "", fmt.Errorf("Failed to get peers for handshake (%w)", err)
 		}
-		log.Debugf("No explicit peer ID, using %s", t.Peers[0])
-		peer = t.Peers[0]
+		peer = t.Peers[rand.Intn(len(t.Peers))]
+		log.Debugf("No explicit peer ID, using %s", peer)
 	}
 	log.Debugf("Establishing handshake with peer %s", peer)
 	hashAsBytes, err := hex.DecodeString(t.InfoHash)
